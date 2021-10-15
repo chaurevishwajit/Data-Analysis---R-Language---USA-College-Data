@@ -1,0 +1,583 @@
+---
+title: "IE6600_Sec05_Group10_Hackathon_RMD"
+
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries, echo = FALSE, warning= FALSE, include=FALSE}
+library(stringr)
+library(forcats)
+library(tidyverse)
+library(ggplot2)
+library(treemapify)
+library(dplyr)
+library(gridExtra)
+library(magrittr)
+library(scales)
+library(plotly)
+library(ggalluvial)
+library(RColorBrewer)
+```
+
+# Introduction
+
+Choosing a college requires balancing a number of goals and determining which are most important. Is it true that a good location is more important than a high graduation rate? Is it more important to have a distinguished name than to have life-changing new experiences? The "best" option is determined by a family's priorities. And there have never been so many instruments to find it out as there are now. Detailed statistics are now just a mouse click away for anyone looking to compare schools' educational achievements in terms of graduation rates, post-college incomes, or alumni debt loads. Information regarding the genuine costs of colleges, including financial help, is also plentiful. The United States is at the forefront of this data boom.Department of Education, which first released a draft of its College Scorecard in 2013 and has been fine-tuning the 7,700-institution database ever since.
+
+We're breaking down the dataset into 4 sections for our analysis. 
+
+1. We will perform Visualization on the study of Incomes in the first section, where we will find the distribution of starting and mid-career salaries, as well as the relationship between them.
+2. In the second phase, we will visualize the various salaries by major and see which degrees exhibit the biggest income rise from entry to mid-career.
+3. In the third section, we will visualize the various salaries based on their college type. We must assess whether or not a student should attend a state-run party school. Then we need to figure out which colleges have the highest starting and mid-career wages, as well as the Top 20 institutions by type.
+4. In the final section, we do a salary study depending on various geographies. The next step is to determine the top 20 colleges by region.
+
+
+```{r, echo = FALSE, warning= FALSE}
+# Read files
+df_degree <- read_csv("degrees-that-pay-back.csv",
+                   col_names = c("undergrad_major", "starting_median_salary", "mid_career_median_salary",
+                                 "percent_change", "mid_career_10th", "mid_career_25th",
+                                 "mid_career_75th", "mid_career_90th"),  # short names w/o whitespace
+                   col_types = "cnndnnnn",  # specify column types to coerce '$' to numeric
+                   skip = 1)  # names specified, skip header
+
+df_college <- read_csv("salaries-by-college-type.csv",
+                   col_names = c("name_of_school", "type_of_school", "starting_median_salary", "mid_career_median_salary",
+                                 "percent_change", "mid_career_10th", "mid_career_25th",
+                                 "mid_career_75th", "mid_career_90th"),
+                   col_types = "ccnnnnnn", skip = 1)
+
+df_region <- read_csv("salaries-by-region.csv",
+                   col_names = c("name_of_school", "region", "starting_median_salary", "mid_career_median_salary",
+                                 "percent_change", "mid_career_10th", "mid_career_25th",
+                                 "mid_career_75th", "mid_career_90th"),
+                   col_types = "ccnnnnnn", skip = 1)
+```
+
+Here's a quick rundown of the salary data by degree.
+
+```{r}
+summary(df_degree)
+```
+
+This data set has a smaller number of observations, and each observation corresponds to a college undergrad_major. As a result, the pay information presented within is from a variety of universities.
+
+A look at the data on salaries by college and type.
+
+```{r}
+summary(df_college)
+```
+A look at the salaries by college and region data set.
+
+```{r}
+summary(df_region)
+```
+
+Individual colleges appear to be the focus of the observations once again. However, this data set has more observations than the college-type data set above. California appears to be a region. As with the prior data set, there are some NAs.
+
+## Finding null values and missing data
+
+For the college degree data set, the missing data is listed by feature.
+
+```{r}
+name_func <- function(y, start_col) {
+  nam <- names(y)
+  data <- unname(y)
+  df_frame <- data.frame()
+  df_frame <- rbind(df_frame, data)
+  names(df_frame) <- nam
+  return(df_frame[, start_col:length(colnames(df_frame))])
+}
+
+colSums(is.na(df_degree)) %>% name_func(2)
+```
+
+Missing data by feature for college type data set.
+
+```{r}
+colSums(is.na(df_college)) %>% name_func(3)
+```
+
+And missing data by feature for college region data set.
+
+```{r}
+colSums(is.na(df_region)) %>% name_func(3)
+```
+
+As a result, there is some missing data for the 10th and 90th percentile mid-career wages in both the college by type and college by area data sets. Fortunately, we have complete data for the 25th and 75th percentiles across all data sets, so this should provide some indication of the range, but not at the extremes of pay.
+
+
+# Distribution of salaries based on region
+
+### Finding the number of colleges as well as the distribution of colleges by area.
+
+```{r}
+ggplot(df_region, aes(region)) +
+  geom_bar(color="blue", fill=rgb(0.1,0.4,0.5,0.7), alpha = 0.8, width=0.2) + scale_fill_hue(c = 40) +
+  theme(legend.position="none") + theme_minimal()+ coord_flip()
+```
+
+### Conclusion
+We can see from the above bar chart that the Northeastern region has the most colleges, with about 100 in total. Surprisingly, California has the fewest colleges compared to the rest of the country.
+
+
+
+
+### We want to do another top 20 list to see if any schools that weren't on the top 20 list of the college types data set pop up because the regions data set had the most observations.
+
+```{r}
+df_top20collge_region <- df_region %>%
+  select(name_of_school, region, mid_career_median_salary) 
+
+df_top20collge_region <- df_top20collge_region %>%
+  arrange(desc(mid_career_median_salary)) %>%
+  top_n(20)
+
+ggplot(df_top20collge_region, aes(reorder(name_of_school, mid_career_median_salary), mid_career_median_salary, fill = region)) +
+  geom_col(alpha = 0.8) +geom_text(aes(label = dollar(mid_career_median_salary)), hjust = 1.1, color = 'gray30') +
+  scale_fill_brewer(palette = 'Pastel2') +scale_y_continuous(labels = dollar) +xlab(NULL) +ggtitle("Top 20 colleges based on region")+coord_flip()
+```
+
+### Conclusion
+With a value of $134,000, it is clear that Dartmount College has the highest mid-career median wage. In the California region, Stanford University has the greatest mid-career median wage, while in the Middlewestern and Southern regions, University of Notre Dame and Rice University have the top mid-career median salaries, respectively.
+
+
+### Finding the distribution of types of schools based upon the total count of schools. 
+
+```{r}
+sal_by_region <- ggplot(data = df_college, mapping = aes(x = type_of_school, fill = type_of_school)) +
+  geom_bar(alpha = 0.8)+ ggtitle("Number of school type ") +  theme_minimal()
+
+
+sal_by_region + coord_polar(theta = "y")
+
+sal_by_region + coord_polar(theta = "x")
+
+```
+
+### Conclusion
+According to our findings, state schools have the most students, while engineering schools have the fewest. There are about 40 liberal arts colleges in the United States.
+
+### Finding the percentage distribution of colleges based upon region and plotting it in donut chart.
+
+```{r}
+# Find the count of college by region
+df_count_college_region <- df_region %>% group_by(region) %>% summarise(Count = n())
+
+# Find the  percentages of college distribution by region
+df_count_college_region$fraction = df_count_college_region$Count / sum(df_count_college_region$Count)
+
+# Finding the cumilative percentage 
+df_count_college_region$ymax = cumsum(df_count_college_region$fraction)
+df_count_college_region$ymin = c(0, df_count_college_region$ymax[1:(nrow(df_count_college_region)-1)])
+
+# creating the column
+df_count_college_region$labelPosition <- (df_count_college_region$ymax + df_count_college_region$ymin) / 2
+
+# Finding the percentage distribution
+df_count_college_region$label <- paste0(df_count_college_region$color, "\n ", round(df_count_college_region$ymax - df_count_college_region$ymin, 2)*100, "%")
+
+college_region <- ggplot(df_count_college_region, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill = region)) +
+  geom_rect() +
+  coord_polar(theta="y") + 
+  scale_fill_brewer(palette=4) +
+  xlim(c(2, 4)) +
+  geom_label( x=3.5, aes(y=labelPosition, label=region), size=4.4) +
+  theme_minimal() +
+  ggtitle("Distribution of number of college by region") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(legend.position = "none")
+
+college_region
+```
+### Conclusion
+
+According to our findings, the Northeastern region has the biggest number of college distribution, while California has the lowest number of institutions.
+
+### Finding changes in salary percentages based on school, region, and majors, as well as analyzing changes in career progression based on the same criteria.
+
+```{r}
+
+df_rearrange_salary <- df_college %>%
+  select(1:4)
+
+df_rearrange_salary <- df_rearrange_salary %>%
+  mutate(
+    Percentage_Change = round((mid_career_median_salary-starting_median_salary)/starting_median_salary,3)*100 )
+df_rearrange_salary
+
+df_rearrange_salary %>% 
+  top_n(10, wt = mid_career_median_salary) %>% 
+  gather("Career", "Salary", 3:4) %>% 
+  mutate(Career = factor(Career, levels=c("starting_median_salary","mid_career_median_salary"))) %>% 
+  plot_ly(x=~Career, y=~Salary, color=~name_of_school, type="scatter", mode="lines+markers",
+    text=~paste(name_of_school,"<br>",type_of_school,"<br>Change:",Percentage_Change, "%"),colors="Paired") %>% layout(
+    title="Universities with the Top Median Salaries",howlegend=FALSE,xaxis=list(showticklabels=FALSE))
+```
+### Conclusion
+
+Dartmount College's typical pay has increased significantly throughout the course of its lifetime, from $50K to roughly $130K. At the outset of a career, the typical pay at California Institute of Technology is $75,000. However, over time, the median salary only increases by 20%, which is much less than the median salary at comparable universities.
+
+### Finding the top 20 colleges base upon mid career median salary
+
+```{r}
+df_top20_colleges <- df_college %>%
+  select(name_of_school, type_of_school, mid_career_median_salary) %>%
+  arrange(desc(mid_career_median_salary)) %>%
+  top_n(20)
+df_top20collge_region$name_of_school[!df_top20collge_region$name_of_school %in% df_top20_colleges$name_of_school]
+```
+
+### Finding the mid-career median pay distribution for the top 20 institutions and plotting it by division
+
+```{r}
+
+ggplot(df_top20collge_region, aes(x=name_of_school, y=mid_career_median_salary)) +
+  geom_segment( aes(x=name_of_school, xend=name_of_school, y=100000, yend=mid_career_median_salary)) +
+  geom_point( size=5, color="red", fill=alpha("orange", 0.3), alpha=0.7, shape=15, stroke=2) + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=0.5))
+
+```
+### Conclusion
+
+The median wage at Rensselaer Polytechnic Institute, Rice University, University of Notre Dame, Cooper Union, and Bucknell University is between $100K and $115K. The compensation ranges from $125K to $140K at Dartmouth College, Princeton University, and Stanford University.
+
+
+### Using alluvial chart to depict the distribution of number of colleges based upon region and majors
+```{r}
+df_top20collge_region$name_of_school[!df_top20collge_region$name_of_school %in% df_top20_colleges$name_of_school]
+df_types_col <- colnames(df_college) %in% c('name_of_school', 'type_of_school')
+# inner join (leave any non-matched schools out)
+df_region_college <- merge(x = df_region, y = df_college[, df_types_col],
+                    by = 'name_of_school')
+
+df_allu <- df_region_college %>% 
+          group_by(region,type_of_school) %>% 
+          summarise(count=n())
+
+alluvial_p1 <- ggplot(df_allu,
+                  aes(y = count, axis1 = region, axis2 = type_of_school)) +
+               geom_alluvium(aes(fill = region), width = 1/12) +
+               geom_stratum(width = 1/12, fill = "black", color = "grey") +
+               geom_label(stat = "stratum", aes(label = after_stat(stratum))) +
+               scale_x_discrete(limits = c("region", "type_of_school"), expand = c(.05, .05)) +
+               scale_fill_brewer(type = "qual", palette = "Set1") +
+               ggtitle("Number of colleges based upon region and majors")
+
+alluvial_p1
+```
+### Conclusion
+
+We notice that the northeastern region has a variety of school types, whereas the southeastern region only has two types of schools: state and party schools. Furthermore, the Midwest has only three types of schools: engineering, Ivy league, and party. Finally, California has the fewest different types of schools.
+
+
+
+### There are a few colleges for which there are both type and region data in their respective data sets.  We can combine these to see if we can come up with any finer insights about salary across these 2 categories. First, what does the distribution look like across college type and region?
+
+```{r}
+# keep college names and types from the college data set
+df_types_col <- colnames(df_college) %in% c('name_of_school', 'type_of_school')
+# inner join (leave any non-matched schools out)
+df_region_college <- merge(x = df_region, y = df_college[, df_types_col],
+                    by = 'name_of_school')
+
+ggplot(df_region_college, aes(region, fill = type_of_school)) +
+  geom_bar(position = 'dodge', alpha = 0.8, color = 'gray20') +
+  scale_fill_brewer(palette = 'Pastel1') +
+  theme(legend.position = "top") + ggtitle(" Number of schools by region")
+```
+### Conclusion
+
+All of the Ivy League colleges are located in the northeastern United States. It also has the most liberal arts and engineering schools of any state. The south appears to have the most party schools.
+
+
+
+# Distribution of salaries based on college type
+
+### Salaries by college and college type are included in the second data set. Here's a graph demonstrating the distribution among various college types.
+
+```{r}
+ggplot(df_college, aes(type_of_school)) + 
+  geom_bar(fill = '#00abff') + theme(axis.text.x = element_text(angle = 0,  hjust = 1)) +
+   labs(y="Number of schools", x = "Type of school", color="Total number of school")+ ggtitle(" Number of schools by school type") +coord_flip()
+```
+### Conclusion
+
+When compared to state schools, engineering schools have 72% fewer schools. It is obvious that the combined number of party, liberal arts, Ivy league, and engineering schools will not be able to outnumber the number of state schools.
+
+### Using tree map to visualise the type of schools and its distribution
+```{r}
+
+df_fm <- df_college %>% group_by(type_of_school) %>% summarise(freq = n())
+df_type_tree <- ggplot(df_fm, aes(area=freq, label=type_of_school, fill=type_of_school)) +
+           geom_treemap() +
+           ggtitle("Tree Maps for Comparison + Part to Whole") +
+           geom_treemap_text(fontface = "italic", colour = "white", place = "centre", grow = FALSE)
+
+df_type_tree
+```
+
+### Conclusion
+When compared to other school types, state schools account for more than 60% of all schools. The Ivy League has the fewest schools. Engineering and party schools have an equal number of students.
+
+### Plotting a box plot to determine the distribution of salaries based on school type for both mid-career and starting salaries over time.
+```{r}
+# Median values for starting and mid-career salaries
+df_start_midsalary <- median(df_college$starting_median_salary)
+df_mid_mediansalary <- median(df_college$mid_career_median_salary)
+
+# Box Plot for Starting Salaries by School Type
+df_boxplot_school_type <- df_college %>% 
+  ggplot(aes(type_of_school, starting_median_salary, fill=type_of_school)) +
+   geom_jitter(alpha = 0.8, pch = 21, colour = "white") +
+  geom_boxplot(alpha=0.6) +
+  geom_abline(slope=0, intercept=df_start_midsalary, colour="red", linetype=2, alpha=0.5) +
+  ggtitle("Engineering and Ivy League Lead the Way in Starting Salaries") +
+  xlab("") + ylab("Starting Salary") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+# Box Plot for Mid-Career Salaries by School Type
+df_boxplot_school_type_2 <- df_college %>% 
+  ggplot(aes(type_of_school, mid_career_median_salary, fill=type_of_school)) +
+   geom_jitter(alpha = 0.8, pch = 21, colour = "white") +
+  geom_boxplot(alpha=0.6) +
+  geom_abline(slope=0, intercept=df_mid_mediansalary, colour="red", linetype=2, alpha=0.5) +
+  ggtitle("Higher Upward Mobility for Ivy Leage Over Engineering Schools Over Time") +
+  xlab("") + ylab("Mid-Career Salary") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+grid.arrange(df_boxplot_school_type, df_boxplot_school_type_2, ncol=1)
+```
+### Conclusion
+
+For a career start salary in the Ivy League, the pay range is between 62K and 67K, but the median salary has increased by 40% over time. State school teachers earn significantly less at the start of their careers, but their pay increases by around 30% over time.
+
+
+
+### Using a boxplot to determine whether a student should attend a party school or not
+```{r}
+# names of state schools that are not party schools
+df_type_college_salary <- df_college %>%
+  select(type_of_school, starting_median_salary, mid_career_median_salary) %>%
+  gather(timeline, salary, starting_median_salary:mid_career_median_salary)
+
+df_multiple_type_college <- df_college %>%
+  group_by(name_of_school) %>%
+  mutate(num_types = n()) %>%
+  filter(num_types > 1) %>%
+  summarise(cross_listed = str_c(type_of_school, collapse = '-')) %>%
+  arrange(desc(name_of_school))
+
+df_party_state <- df_multiple_type_college$cross_listed == 'Party-State'
+df_name_party_state <- df_multiple_type_college$name_of_school[df_party_state]
+
+df_state_not_party <- df_college$type_of_school == 'State' &
+  !(df_college$name_of_school %in% df_name_party_state)  # logical vector on 'df_college'
+df_party_not_state <- df_college$name_of_school[df_state_not_party]
+# double-check counts
+stopifnot(sum(df_college$type_of_school == 'State') ==
+            length(df_name_party_state) + length(df_party_not_state))
+
+# subset college data set to include party schools and state schools separately
+df_party_and_state <- df_college$type_of_school == 'State' &
+  !df_state_not_party  # logical vector on 'df_college'
+
+df_state_versus_party <- df_college %>%
+  select(name_of_school, starting_median_salary, mid_career_median_salary) %>%
+  filter(df_state_not_party | df_party_and_state) %>%  # party and not party state schools
+  mutate(party_school = name_of_school %in% df_name_party_state)
+# wide to long
+df_state_vrsus_party_long <- df_state_versus_party %>%
+  gather(timeline, salary, starting_median_salary, mid_career_median_salary) 
+
+# plot difference in starting and mid-career salaries
+ggplot(df_state_vrsus_party_long, aes(party_school, salary, fill = timeline)) +
+  geom_jitter(aes(color = timeline), alpha = 0.2) +
+  scale_color_manual(values = c('blue', 'orange')) +
+  geom_boxplot(alpha = 0.6, outlier.color = NA) +
+  scale_fill_manual(values = c('blue', 'orange')) +
+  scale_y_continuous(labels = dollar) +
+  theme(legend.position = "top") + ggtitle("Analysing difference in starting and mid-career salaries") +
+  coord_flip()
+```
+### Conclusion
+
+There is some relevance here, as we can see. More data would be helpful, but this appears to imply that if you have the opportunity to attend a state school, it would be better to attend a state school that is also a party school, all other circumstances being equal. Starting and mid-career median incomes for state-party schools are statistically greater than for state non-party colleges.
+ 
+
+### Determing the interquartile range of salaries based upon the school types and findinng how they are distributed
+```{r}
+df_filledby_college<-df_college[,c("type_of_school","name_of_school","starting_median_salary","mid_career_median_salary")]
+df_iqr<-aggregate(cbind(starting_median_salary,mid_career_median_salary) ~ type_of_school,df_filledby_college,IQR)
+df_iqr$PercentChange<-with(df_iqr,(mid_career_median_salary-starting_median_salary)/starting_median_salary)
+
+ggplot(df_iqr, aes(x=reorder(type_of_school,PercentChange),mid_career_median_salary)) +
+    geom_text(aes(label=percent(PercentChange)),size=3,hjust=2.2,vjust=-0.5)+
+    geom_col(fill="blue",alpha=0.3) + 
+    geom_col(fill="blue",aes(type_of_school,starting_median_salary),alpha=0.6) + 
+    scale_y_continuous(labels = scales::dollar) + 
+    ggtitle("The % change for each school type IQR salary from high to low") +
+    xlab("School Type") +
+    ylab("Salary")+
+    geom_segment(aes(x=type_of_school, xend=type_of_school, y=mid_career_median_salary, yend=starting_median_salary),size=0.5,arrow = arrow(length=unit(0.2,"cm"), ends="both", type = "closed")) +
+    coord_flip() 
+```
+
+### Conclusion
+
+State-party institutions appear to have greater mid-career median incomes than state non-party schools. More data would be useful here as well, given there aren't enough observations for simply state-party schools.
+
+
+```{r}
+df_top20_colleges <- df_college %>%
+  select(name_of_school, type_of_school, mid_career_median_salary) %>%
+  arrange(desc(mid_career_median_salary)) %>%
+  top_n(20)
+
+```
+
+
+
+# Analysing salaries by college type and region
+
+### What are the starting median income and mid-career median salary distributions by college?
+```{r}
+# select starting and mid-career salaries and reformat to long
+df_starting_versus_median <- df_region %>%
+  select(starting_median_salary, mid_career_median_salary) %>%
+  gather(timeline, salary) # reverse levels, start salary first
+
+# plot histogram with height as density and smoothed density
+
+ggplot(df_starting_versus_median, aes(salary, fill = timeline)) +
+  geom_density(alpha = 0.2, color = NA) +
+  geom_histogram(aes(y = ..density..), alpha = 0.5, position = 'dodge') +
+  scale_fill_manual(values = c('darkgreen', 'purple4')) +
+  scale_x_continuous(labels = dollar) +
+  theme(legend.position = "top",
+        axis.text.y = element_blank(), axis.ticks.y = element_blank()) +ggtitle("Distribution of starting and mid-career salaries") 
+```
+
+### Conclusion
+
+The starting median pay distribution is clearly concentrated at the lower end of the scale and is slightly right-skewed.The distribution of median (50th percentile) incomes grows more spread as working time proceeds to mid-career.
+
+
+### Finding the correlation between starting and mid-career salaries
+```{r}
+ggplot(df_region, aes(starting_median_salary, mid_career_median_salary)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(se = F) +  # loess fit
+  scale_x_continuous(labels = dollar) +
+  scale_y_continuous(labels = dollar) + ggtitle("correlation between starting and mid-career salaries") 
+
+paste('correlation coefficient',
+      round(with(df_region, cor(starting_median_salary, mid_career_median_salary)), 4))
+```
+### Conclusion
+
+Although the relationship is not simple linear, there is a very high association. Although there does not appear to be enough data to make a convincing assertion, the slope of a first order coefficient appears to diminish and approach an asymptote as starting median salary grows. 
+
+# Salaries by undergrad_major
+
+### What are the differences in pay based on degree? Which undergrad majors pay the most in the beginning and middle of their careers?
+```{r fig.height=20, fig.width=16}
+df_start_salary <- ggplot(df_degree, aes(x = reorder(undergrad_major, starting_median_salary), starting_median_salary)) +
+  geom_col(alpha = 0.5, fill = "darkgreen") +
+  geom_col(aes(x = reorder(undergrad_major, mid_career_median_salary), mid_career_median_salary, na.rm = TRUE), alpha = 0.5) +
+  geom_text(aes(label = dollar(starting_median_salary)), size = 5, hjust = 1.1) +
+  scale_y_continuous(labels = dollar) +
+  xlab(NULL) +
+  coord_flip() +
+  ggtitle("starting salary") +geom_point() + 
+    theme(plot.title = element_text(size = 20, face = "bold")) + theme(axis.text=element_text(size=12),
+  axis.title=element_text(size=14,face="bold"))
+
+df_midsalary <- ggplot(df_degree, aes(x = reorder(undergrad_major, mid_career_median_salary), mid_career_median_salary)) +
+  geom_col(alpha = 0.5, fill = 'purple4') +
+  geom_col(aes(x = reorder(undergrad_major, mid_career_median_salary), starting_median_salary, na.rm = TRUE), alpha = 0.5) +
+  geom_text(aes(label = dollar(mid_career_median_salary)), size = 5, hjust = -1.1) +
+  scale_y_reverse(labels = dollar) +
+  scale_x_discrete(position = 'top') +
+  xlab(NULL) +
+  coord_flip() +
+  ggtitle("Mid career salary ")+geom_point() + 
+    theme(plot.title = element_text(size = 20, face = "bold"))+ theme(axis.text=element_text(size=12),
+  axis.title=element_text(size=16,face="bold"))
+
+library(gridExtra)
+grid.arrange(df_start_salary, df_midsalary, nrow = 2)
+```
+### Conclusion
+The gray bars in the top plot represent mid-career income for comparison. Similarly, the darker colour on the bottom plot represents the starting salary.The highest median starting salaries are for engineering, computer science, and two health occupation degrees. What about the prospect of a long-term salary? Engineering, along with a few other STEM undergrad majors and economics, reign supreme once more.
+
+### Which degrees have the biggest income rise from entry to mid-career?
+```{r fig.height=8, fig.width=9}
+ggplot(df_degree, aes(x = reorder(undergrad_major, percent_change), mid_career_median_salary)) +
+  geom_col(alpha = 0.5) +
+  geom_col(aes(x = reorder(undergrad_major, percent_change), starting_median_salary), alpha = 0.4) +
+  geom_text(aes(label = percent(percent_change / 100)), size = 3, hjust = 1.1) +
+  scale_y_reverse(labels = dollar) +
+  xlab(NULL) +
+  ylab('salary') +
+  coord_flip() +
+  ggtitle("ordered by percent change") + geom_point() + 
+    theme(plot.title = element_text(size = 20, face = "bold"))+ theme(axis.text=element_text(size=12),
+  axis.title=element_text(size=16,face="bold"))
+```
+### Conclusion
+The degrees that exhibit the greatest percent change in career earnings are listed first in this graph. Despite the fact that physician assistants have the greatest starting salaries, the typical mid-career wage hasn't changed much. Philosophy and math majors appear to grow the most by mid-career. We can see that many engineering degrees start high and still have a high mid-career pay, despite the fact that they don't alter much.
+
+### Below is a graphic of the different percentiles at mid-career, arranged by the top 90th percentile of earners in that career, to provide an understanding of the range (as well as potential) of mid-career salaries.
+```{r fig.height=15, fig.width=9}
+# from wide to long format for mid-career percentiles
+df_major_midcareer <- df_degree %>%
+  select(-starting_median_salary, -percent_change) %>%
+  mutate(mid90th = mid_career_90th)
+
+df_major_midcareer <-df_major_midcareer  %>%
+  gather(percentile, salary, mid_career_10th:mid_career_90th)
+
+ggplot(df_major_midcareer, aes(x = reorder(undergrad_major, mid90th),y = salary,
+                           color = percentile), color = 'green') +
+  geom_point(shape = 10) +
+  scale_color_brewer(type = 'div') +
+  scale_y_continuous(labels = dollar, sec.axis = dup_axis()) +
+  labs(x = NULL, y = NULL) +
+  coord_flip() +
+  ggtitle("mid-career salary") +
+  theme(legend.position = "top") + theme(plot.title = element_text(size = 30, face = "bold"))+ theme(axis.text=element_text(size=18),
+  axis.title=element_text(size=20,face="bold"))
+```
+### Conclusion
+Several undergrad majors, like as economics, finance, chemical engineering, and math, provide a lot of potential for earning money. Others, such as nutrition and nursing, have a narrow range of mid-career salaries, with individuals in the 90th percentile not exceeding $100,000.The mid-career salary is superimposed on the starting career salaries with a lighter colour. Engineering colleges dominate the better starting salaries in practically all regions. Engineering and ivy league beginning wages are fairly comparable in the northeast. An ivy league degree, on the other hand, has a higher value at mid-career. Intriguingly, liberal arts schools in the south have greater mid-career wages. If you can't get into an engineering school in California or the rest of the west, it appears that attending a party school is better than a state school that isn't a party school in terms of mid-career wage potential.
+
+
+# Conclusion
+
+For our visualization, we looked at three key factors: salaries by region, salaries by college type, and salaries by college type and region. We discovered that the Ivy League has the fewest number of schools in the country. Surprisingly, the Ivy League has the highest pay range of any school. Furthermore, Dartmount College has a significantly higher starting salary, and the median salary has increased by 30 percent each year over a period of time.We also visualized the distribution of salaries by job type and function, and our analyses revealed that people with a background in economics and finance have a better chance of getting a higher pay. The starting salary for a Physician Assistant is $74,300, and the pay raise for a Physician Assistant is 15% over time. People with a chemical engineering background, on the other hand, earn significantly more in their mid-career. Starting and mid-career salaries have a strong correlation.
+
+According to one of our observations on start and mid-career salary, if you have the opportunity to attend a state school, it would be better to attend a state school that is also a party school, all else being equal. The northeastern region has a variety of school types, whereas the southeastern region only has two: state and party schools. We created a time series chart to determine which job type, background, and college type has a higher pay over time, and based on our observations, students from California Institute of Technology have a larger pay increase after a few years of experience.Finally, we were able to conclude from our analyses that students graduating from Ivy League universities have a better chance of landing a higher paying job than students graduating from any other university, and they also have a wide range of job types available to students.
+
+
+
+
+# Future Scope
+
+If we had more information about the specializations of each major, we would have been able to determine which specializations would help us get a better job. We could also have created a time series chart to analyze the pay change year over year, which would have helped us understand the change in pay structure by region, college type, and major.The job type does not contain information about the student's background, so if we had that information, we could have more accurately predicted future pay trends for each type. 
+
+
+
+
+# References
+
+1. https://www.r-graph-gallery.com/ 
+2. http://online.wsj.com/public/resources/documents/info-Salaries_for_Colleges_by_Type-sort.html
+3. http://online.wsj.com/public/resources/documents/info-Salaries_for_Colleges_by_Region-sort.html
+4. http://online.wsj.com/public/resources/documents/info-Degrees_that_Pay_you_Back-sort.html
